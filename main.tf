@@ -9,7 +9,7 @@ resource "aws_vpc" "default" {
   cidr_block = "${var.vpc_cidr}"
   enable_dns_hostnames = true
 
-  tags {
+  tags = {
     Name = "vpc-main"
   }
 }
@@ -21,7 +21,7 @@ resource "aws_subnet" "public-subnet" {
   availability_zone = "${var.aws_region}a"
   map_public_ip_on_launch = "true"
 	
-  tags {
+  tags = {
     Name = "Public-Subnet"
   }
 }
@@ -30,10 +30,22 @@ resource "aws_subnet" "public-subnet" {
 resource "aws_subnet" "private-subnet" {
   vpc_id = "${aws_vpc.default.id}"
   cidr_block = "${var.private_subnet_cidr}"
+  map_public_ip_on_launch = "false"
   availability_zone = "${var.aws_region}a"
 
-  tags {
+  tags = {
     Name = "Private-Subnet"
+  }
+}
+
+resource "aws_subnet" "private-subnet-b" {
+  vpc_id = "${aws_vpc.default.id}"
+  cidr_block = "${var.private_subnet_cidr_b}"
+  map_public_ip_on_launch = "false"
+  availability_zone = "${var.aws_region}b"
+
+  tags = {
+    Name = "Private-Subnet-B"
   }
 }
 
@@ -41,16 +53,19 @@ resource "aws_subnet" "private-subnet" {
 resource "aws_internet_gateway" "gw" {
   vpc_id = "${aws_vpc.default.id}"
 
-  tags {
+  tags = {
     Name = "VPC IGW"
   }
 }
 
+resource "aws_eip" "terraformtraining-nat" {
+  vpc = true
+}
 # Define the NAT gateway
-resource "aws_nat_gateway" "gw" {
-  allocation_id = "${aws_eip.nat.id}"
+resource "aws_nat_gateway" "nat" {
+  allocation_id = "${aws_eip.terraformtraining-nat.id}"
   subnet_id     = "${aws_subnet.public-subnet.id}"
-
+  depends_on = ["aws_internet_gateway.gw"]
   tags = {
     Name = "gw NAT"
   }
@@ -65,20 +80,24 @@ resource "aws_route_table" "public-rt" {
     gateway_id = "${aws_internet_gateway.gw.id}"
   }
 
-  tags {
+  tags = {
     Name = "Public Subnet RT"
   }
 }
 
 # Define the route table private
 resource "aws_route_table" "private-rt" {
-	vpc_id = "${aws_vpc.default.id}"
+    vpc_id = "${aws_vpc.terraformtraining.id}"
+    route {
+        cidr_block = "0.0.0.0/0"
+        nat_gateway_id = "${aws_nat_gateway.nat.id}"
+    }
 
-	route {
-		cidr_block = "0.0.0.0/0"
-		instance_id = "${aws_nat_gateway.gw.id}"
-	}
+    tags = {
+        Name = "private-rt"
+    }
 }
+
 
 # Assign the route table to the public Subnet
 resource "aws_route_table_association" "public-rt" {
@@ -87,9 +106,13 @@ resource "aws_route_table_association" "public-rt" {
 }
 
 # Assign the route table to the private Subnet
-resource "aws_route_table_association" "private-rt" {
-	subnet_id = "${aws_subnet.private-subnet.id}"
-	route_table_id = "${aws_route_table.private-rt.id}"
+resource "aws_route_table_association" "private-rt-1-a" {
+    subnet_id = "${aws_subnet.private-subnet.id}"
+    route_table_id = "${aws_route_table.private-rt.id}"
+}
+resource "aws_route_table_association" "tprivate-rt-2-b" {
+    subnet_id = "${aws_subnet.private-subnet-b.id}"
+    route_table_id = "${aws_route_table.private-rt.id}"
 }
 
 # Define the security group for private subnet
@@ -101,12 +124,12 @@ resource "aws_security_group" "sg_dev"{
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["${var.public_subnet_cidr}", "${var.private_subnet_cidr}"]
+    cidr_blocks = ["${var.public_subnet_cidr}", "${var.private_subnet_cidr}", "${var.private_subnet_cidr_b}"]
   }
 
   vpc_id = "${aws_vpc.default.id}"
 
-  tags {
+  tags = {
     Name = "sg_dev"
   }
 }
