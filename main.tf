@@ -87,7 +87,7 @@ resource "aws_route_table" "public-rt" {
 
 # Define the route table private
 resource "aws_route_table" "private-rt" {
-    vpc_id = "${aws_vpc.terraformtraining.id}"
+    vpc_id = "${aws_vpc.default.id}"
     route {
         cidr_block = "0.0.0.0/0"
         nat_gateway_id = "${aws_nat_gateway.nat.id}"
